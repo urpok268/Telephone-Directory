@@ -1,10 +1,6 @@
 // sample data
-const people = [
-  { id:1, org:"ООО Пример", address:"г. Москва, ул. Примерная, 1", name:'Иванов Иван Иванович', pos:'Директор', phones:['+7 (495) 123-45-67'], email:'ivanov@example.com', fax:'+7 (495) 765-43-21' },
-  { id:2, org:"АО Тест", address:"г. Санкт-Петербург, ул. Тестовая, 5", name:'Смирнов Алексей Павлович', pos:'Начальник участка', phones:['+7 (812) 323-45-67'], email:'smirnov@test.ru', fax:'+7 (812) 765-43-23' },
-  { id:3, org:"ЗАО Образец", address:"г. Казань, пр. Образцовый, 12", name:'Морозов Денис Андреевич', pos:'Инженер ПТО', phones:['+7 (843) 523-45-67'], email:'morozov@sample.ru', fax:'+7 (843) 765-43-25' },
-];
-
+const orgData = (typeof window !== 'undefined' && window.orgData) || {};
+const people = (typeof window !== 'undefined' && window.people) || [];
 // --- QR генератор ---
 function createQRCodeInContainer(container, text, size){
   container.innerHTML = '';
@@ -118,7 +114,7 @@ function renderGrouped(list){
         </div>
         <div class="card-qr" data-phone="${pval||''}" id="qr-${person.id}"></div>
       `;
-      card.addEventListener('click',()=> showQRModal(person));
+      // card.addEventListener('click',()=> showQRModal(person));
       pplWrap.appendChild(card);
     });
     block.appendChild(pplWrap);
@@ -173,11 +169,88 @@ function showQRModal(person){
   // закрытие модалки
   document.getElementById('modalClose').onclick = () => document.getElementById('qrModal').style.display='none';
   document.getElementById('qrModal').onclick = e => { if(e.target.id==='qrModal') e.currentTarget.style.display='none'; };
+
 })();
 
 // --- обновление времени ---
 setInterval(()=>{ 
   const d=new Date(); 
-  document.getElementById('time').textContent =
-    String(d.getHours()).padStart(2,'0')+':' + String(d.getMinutes()).padStart(2,'0'); 
+  document.getElementById('time').textContent = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); 
 },1000);
+// === Админ-действия в карточках (добавление кнопок редактирования/удаления) ===
+(function () {
+  if (!window.isLoggedIn) return;
+
+  // Хелпер: создать кнопку
+  function makeActionButton(text, href) {
+    const a = document.createElement('a');
+    a.className = 'btn-action';
+    a.textContent = text;
+    a.href = href;
+    a.addEventListener('click', (e) => {
+      // не мешаем клавиатурной навигации, просто ссылка
+    });
+    return a;
+  }
+
+  // Хелпер: форма удаления с CSRF
+  function makeDeleteForm(id) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = 'delete.php';
+    form.className = 'inline-delete-form';
+
+    const inId = document.createElement('input');
+    inId.type = 'hidden';
+    inId.name = 'id';
+    inId.value = String(id);
+
+    const inCsrf = document.createElement('input');
+    inCsrf.type = 'hidden';
+    inCsrf.name = 'csrf';
+    inCsrf.value = window.csrf || '';
+
+    const btn = document.createElement('button');
+    btn.type = 'submit';
+    btn.className = 'btn-action danger';
+    btn.textContent = 'Удалить';
+    btn.onclick = function () {
+      return confirm('Удалить запись?');
+    };
+
+    form.appendChild(inId);
+    form.appendChild(inCsrf);
+    form.appendChild(btn);
+    return form;
+  }
+
+  // Вставить панель действий в карточки
+  function injectActions() {
+    const cards = document.querySelectorAll('.list .card');
+    cards.forEach(card => {
+      if (card.querySelector('.card-actions')) return; // уже добавлено
+      const id = card.dataset.id;
+      if (!id) return;
+
+      const actions = document.createElement('div');
+      actions.className = 'card-actions';
+
+      const edit = makeActionButton('Изменить', 'edit.php?id=' + encodeURIComponent(id));
+      const del = makeDeleteForm(id);
+
+      actions.appendChild(edit);
+      actions.appendChild(del);
+
+      // Всегда ставим панель действий в конец карточки,
+      // чтобы она занимала всю ширину и не вылезала за пределы
+      card.appendChild(actions);
+    });
+  }
+
+  // Первичная попытка
+  injectActions();
+
+  // На случай динамических обновлений списка
+  const obs = new MutationObserver(() => injectActions());
+  obs.observe(document.getElementById('resultsList'), { childList: true, subtree: true });
+})();
